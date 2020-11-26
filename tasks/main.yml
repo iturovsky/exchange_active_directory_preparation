@@ -1,0 +1,83 @@
+---
+# tasks file for exchange_active_directory_preparation
+- name: Install Packages
+  win_chocolatey:
+    name:
+      - dotnetfx
+      - vcredist2013
+    state: present
+  register: exchange_active_directory_preparation_packages
+
+- name: Install Features
+  win_feature:
+    name: RSAT-ADDS
+    state: present
+  register: exchange_active_directory_preparation_features
+
+- name: End Play in Check Mode
+  meta: end_host
+  when: 
+  - exchange_active_directory_preparation_features.changed
+  - ansible_check_mode
+
+- name: Reboot After Prereq Install
+  win_reboot:
+  when: exchange_active_directory_preparation_packages.rc == 3010 or exchange_active_directory_preparation_features.reboot_required
+  
+- name: Get Schema Info
+  exch_schema_stat:
+  register: exchange_active_directory_preparation_schema
+  vars:
+    ansible_become: yes
+    ansible_become_method: runas
+    ansible_become_user: "{{ exchange_active_directory_preparation_schema_admin_user }}"
+    ansible_become_pass: "{{ exchange_active_directory_preparation_schema_admin_password }}"
+
+- name: Extend Schema
+  win_command: "{{exchange_active_directory_preparation_setup_path}} /IAcceptExchangeServerLicenseTerms /PrepareSchema"
+  when: not exchange_active_directory_preparation_schema.schema_expanded
+  vars:
+    ansible_become: yes
+    ansible_become_method: runas
+    ansible_become_user: "{{ exchange_active_directory_preparation_schema_admin_user }}"
+    ansible_become_pass: "{{ exchange_active_directory_preparation_schema_admin_password }}"
+
+- name: Get Forest Info
+  exch_forest_stat:
+  register: exchange_active_directory_preparation_forest
+  vars:
+    ansible_become: yes
+    ansible_become_method: runas
+    ansible_become_user: "{{ exchange_active_directory_preparation_enterprise_admin_user }}"
+    ansible_become_pass: "{{ exchange_active_directory_preparation_enterprise_admin_password }}"
+
+- name: Prepare AD Forest
+  win_command: >
+   {{ exchange_active_directory_preparation_setup_path }} 
+   /IAcceptExchangeServerLicenseTerms
+   /PrepareAD
+   /OrganizationName:{{ exchange_active_directory_preparation_forest.exch_organization_name if exchange_active_directory_preparation_forest.forest_prepared else exchange_active_directory_preparation_organization_name }}
+  when: not exchange_active_directory_preparation_forest.forest_prepared
+  vars:
+    ansible_become: yes
+    ansible_become_method: runas
+    ansible_become_user: "{{ exchange_active_directory_preparation_enterprise_admin_user }}"
+    ansible_become_pass: "{{ exchange_active_directory_preparation_enterprise_admin_password }}"
+
+- name: Get Domain Info
+  exch_domain_stat:
+  register: exchange_active_directory_preparation_domain
+  vars:
+    ansible_become: yes
+    ansible_become_method: runas
+    ansible_become_user: "{{ exchange_active_directory_preparation_domain_admin_user }}"
+    ansible_become_pass: "{{ exchange_active_directory_preparation_domain_admin_password }}"
+
+- name: Prepare AD
+  win_command: "{{ exchange_active_directory_preparation_setup_path }}  /IAcceptExchangeServerLicenseTerms /PrepareAllDomains"
+  when: not exchange_active_directory_preparation_domain.domain_prepared
+  vars:
+    ansible_become: yes
+    ansible_become_method: runas
+    ansible_become_user: "{{ exchange_active_directory_preparation_domain_admin_user }}"
+    ansible_become_pass: "{{ exchange_active_directory_preparation_domain_admin_password }}"
