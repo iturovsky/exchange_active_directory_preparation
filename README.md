@@ -31,7 +31,6 @@ License
 -------
 
 BSD
-
 Author Information
 ------------------
 
